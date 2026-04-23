@@ -13,9 +13,9 @@
 
 struct Pipe
 {
-  float x;        // position horizontale
-  int gapTop;     // début vertical du trou
-  int scored;     // 0 = pas encore compté, 1 = déjà compté
+  float x;           // position horizontale
+  int gapTop;        // début vertical du trou
+  bool hasScored;    // true = déjà compté
 };
 
 struct GameState
@@ -28,7 +28,7 @@ struct GameState
   int birdLeft = 0;
   int birdRight = 0;
 
-  int dead = 0;
+  bool isDead = false;
   float spawnTimer = 0.0f;
 
   unsigned long long score = 0;
@@ -170,7 +170,7 @@ void SpawnPipeIfNeeded(
   if (game.spawnTimer >= pipeSpawnInterval)
   {
     game.spawnTimer = game.spawnTimer - pipeSpawnInterval;
-    game.pipes.push_back({ pipeSpawnX, gapDistribution(rng), 0 });
+    game.pipes.push_back({ pipeSpawnX, gapDistribution(rng), false });
   }
 }
 
@@ -186,9 +186,9 @@ void UpdatePipesAndScore(
     game.pipes[i].x = game.pipes[i].x - pipeSpeed * dt;
 
     int pipeRight = (int)std::floor(game.pipes[i].x) + pipeWidth - 1;
-    if (game.pipes[i].scored == 0 && pipeRight < birdLeft)
+    if (!game.pipes[i].hasScored && pipeRight < birdLeft)
     {
-      game.pipes[i].scored = 1;
+      game.pipes[i].hasScored = true;
       game.score = game.score + 1;
       if (game.score > game.bestScore)
       {
@@ -397,7 +397,7 @@ int main()
 
   auto prev = std::chrono::steady_clock::now();
 
-  while (game.dead == 0)
+  while (!game.isDead)
   {
     auto now = std::chrono::steady_clock::now();
     float dt = std::chrono::duration<float>(now - prev).count();
@@ -420,15 +420,15 @@ int main()
 
     if (CheckWallCollision(game.birdTop, game.birdBottom, ScreenHeight))
     {
-      game.dead = 1;
+      game.isDead = true;
     }
 
-    if (!game.dead && CheckPipeCollision(game.birdTop, game.birdBottom, game.birdLeft, game.birdRight, PipeWidth, PipeGapHeight, game.pipes))
+    if (!game.isDead && CheckPipeCollision(game.birdTop, game.birdBottom, game.birdLeft, game.birdRight, PipeWidth, PipeGapHeight, game.pipes))
     {
-      game.dead = 1;
+      game.isDead = true;
     }
 
-    if (game.dead != 0) break;
+    if (game.isDead) break;
 
     std::vector<std::string> frame = BuildEmptyFrame(ScreenWidth, ScreenHeight);
     DrawPipes(frame, game.pipes, PipeWidth, PipeGapHeight, ScreenWidth, ScreenHeight);
