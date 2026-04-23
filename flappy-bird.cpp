@@ -117,6 +117,42 @@ void RestoreConsole(HANDLE inputHandle, DWORD originalInputMode)
   SetConsoleMode(inputHandle, originalInputMode);
 }
 
+class ConsoleModeGuard
+{
+public:
+  ConsoleModeGuard() = default;
+
+  ~ConsoleModeGuard()
+  {
+    if (isConfigured)
+    {
+      RestoreConsole(inputHandle, originalInputMode);
+    }
+  }
+
+  bool Initialize()
+  {
+    isConfigured = SetupConsole(inputHandle, outputHandle, originalInputMode);
+    return isConfigured;
+  }
+
+  HANDLE GetInputHandle() const
+  {
+    return inputHandle;
+  }
+
+  HANDLE GetOutputHandle() const
+  {
+    return outputHandle;
+  }
+
+private:
+  HANDLE inputHandle = INVALID_HANDLE_VALUE;
+  HANDLE outputHandle = INVALID_HANDLE_VALUE;
+  DWORD originalInputMode = 0;
+  bool isConfigured = false;
+};
+
 bool HandleInput(HANDLE inputHandle, GameState& game, float jumpVelocity)
 {
   INPUT_RECORD inputRecord;
@@ -395,11 +431,8 @@ int main()
   const int GapMinTop = 2;
   const int GapMaxTop = ScreenHeight - PipeGapHeight - 2;
 
-  HANDLE inputHandle = INVALID_HANDLE_VALUE;
-  HANDLE outputHandle = INVALID_HANDLE_VALUE;
-  DWORD originalInputMode = 0;
-
-  if (!SetupConsole(inputHandle, outputHandle, originalInputMode))
+  ConsoleModeGuard consoleGuard;
+  if (!consoleGuard.Initialize())
   {
     return 1;
   }
@@ -423,9 +456,8 @@ int main()
       deltaTime = MaxDeltaTime;
     }
 
-    if (!HandleInput(inputHandle, game, JumpVelocity))
+    if (!HandleInput(consoleGuard.GetInputHandle(), game, JumpVelocity))
     {
-      RestoreConsole(inputHandle, originalInputMode);
       return 1;
     }
 
@@ -477,6 +509,5 @@ int main()
   }
 
   SaveBestScore("best-score.txt", game.bestScore);
-  RestoreConsole(inputHandle, originalInputMode);
   return 0;
 }
