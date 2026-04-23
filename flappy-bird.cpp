@@ -13,6 +13,32 @@
 
 int main()
 {
+  // ----------------------------
+  // Constantes de jeu / rendu
+  // ----------------------------
+  const int ScreenWidth = 50;
+  const int ScreenHeight = 20;
+
+  const int BirdWidth = 2;
+  const int BirdHeight = 2;
+  const int BirdLeft = 10;
+
+  const int PipeWidth = 6;
+  const int PipeGapHeight = 6;
+  const float PipeSpawnX = 50.0f;
+
+  const float MaxDeltaTime = 0.1f;
+  const float JumpVelocity = -14.0f;
+  const float Gravity = 42.0f;
+  const float PipeSpawnInterval = 1.4f;
+  const float PipeSpeed = 18.0f;
+
+  const float OffscreenPipeLimit = 0.0f;
+  const float TargetFrameDuration = 1.0f / 30.0f;
+
+  const int GapMinTop = 2;
+  const int GapMaxTop = ScreenHeight - PipeGapHeight - 2;
+
   HANDLE h  = GetStdHandle(STD_INPUT_HANDLE);  // input
   HANDLE h2 = GetStdHandle(STD_OUTPUT_HANDLE); // output
   if (h == INVALID_HANDLE_VALUE)  { std::cerr << "error"  << std::endl; return 1; }
@@ -32,17 +58,18 @@ int main()
   // ----------------------------
   // Données du joueur ("bird")
   // ----------------------------
-  float by = 9.0f;         // y position (float)
-  float bv = 0.0f;         // velocity
-  int   bt = 0;            // top (int)
-  int   bb = 0;            // bottom (int)
-  int   bl = 10;           // left
-  int   br = 10 + 2 - 1;  // right
-  int dead = 0;            // 0 = alive, 1 = dead
-  float t  = 0.0f;         // spawn timer
-  unsigned long long sc  = 0; // current score
-  unsigned long long bsc = 0; // best score
-  // hud padding
+  float by = 9.0f;                      // y position (float)
+  float bv = 0.0f;                      // velocity
+  int   bt = 0;                         // top (int)
+  int   bb = 0;                         // bottom (int)
+  int   bl = BirdLeft;                  // left
+  int   br = BirdLeft + BirdWidth - 1;  // right
+  int dead = 0;                         // 0 = alive, 1 = dead
+  float t  = 0.0f;                      // spawn timer
+  unsigned long long sc  = 0;           // current score
+  unsigned long long bsc = 0;           // best score
+
+  // hud padding 
   int lp = 0; // left padding
   int rp = 0; // right padding
   
@@ -57,7 +84,7 @@ int main()
   // Générateur aléatoire
   // ----------------------------
   std::mt19937 rng(std::random_device{}());
-  std::uniform_int_distribution<int> d(2, 20 - 6 - 2); // gap position
+  std::uniform_int_distribution<int> d(GapMinTop, GapMaxTop); // gap position
 
   INPUT_RECORD rec;
   DWORD ne = 0;
@@ -87,7 +114,7 @@ int main()
     auto now = std::chrono::steady_clock::now();
     float dt = std::chrono::duration<float>(now - prev).count();
     prev = now;
-    if (dt > 0.1f) dt = 0.1f; // clamp delta time
+    if (dt > MaxDeltaTime) dt = MaxDeltaTime; // clamp delta time
 
     // ----------------------------
     // Lecture des événements clavier
@@ -114,7 +141,7 @@ int main()
         {
           if (k.wVirtualKeyCode == VK_RETURN)
           {
-            bv = -14.0f;
+            bv = JumpVelocity;
           } // end if enter
         } // end if key down
       } // end if key event
@@ -123,17 +150,17 @@ int main()
     // ----------------------------
     // Physique du joueur
     // ----------------------------
-    bv = bv + 42.0f * dt;
+    bv = bv + Gravity * dt;
     by = by + bv * dt;
 
     // ----------------------------
     // Spawn des tuyaux
     // ----------------------------
     t = t + dt;
-    if (t >= 1.4f)
+    if (t >= PipeSpawnInterval)
     {
-      t = t - 1.4f;
-      px.push_back(50.0f); 
+      t = t - PipeSpawnInterval;
+      px.push_back(PipeSpawnX); 
       pg.push_back(d(rng)); 
       ps.push_back(0); 
     } 
@@ -143,10 +170,10 @@ int main()
     // ----------------------------
     for (int i = 0; i < (int)px.size(); i++) // loop over all pipes
     {
-      px[i] = px[i] - 18.0f * dt; // move pipe left
+      px[i] = px[i] - PipeSpeed * dt; // move pipe left
 
-      int pipeRight = (int)std::floor(px[i]) + 6 - 1;
-      if (ps[i] == 0 && pipeRight < 10) {
+      int pipeRight = (int)std::floor(px[i]) + PipeWidth - 1;
+      if (ps[i] == 0 && pipeRight < BirdLeft) {
         ps[i] = 1;         
         sc = sc + 1;        
         if (sc > bsc) bsc = sc;
@@ -157,7 +184,7 @@ int main()
     // Suppression des tuyaux hors écran
     // ----------------------------
     for (int i = (int)px.size() - 1; i >= 0; i--) {
-      if (px[i] + 6.0f < 0.0f) 
+      if (px[i] + PipeWidth < OffscreenPipeLimit) 
       {
         px.erase(px.begin() + i); 
         pg.erase(pg.begin() + i); 
@@ -169,11 +196,12 @@ int main()
     // Collision : joueur / murs
     // ----------------------------
     bt = (int)std::floor(by); 
-    bb = bt + 2 - 1;          
-    bl = 10;                   // same every frame
-    br = 10 + 2 - 1;           // same every frame
+    bb = bt + BirdHeight - 1;          
+    bl = BirdLeft;                     
+    br = BirdLeft + BirdWidth - 1;     
+
     // check wall 
-    if (bt < 0 || bb >= 20)  { dead = 1;  }
+    if (bt < 0 || bb >= ScreenHeight)  { dead = 1;  }
 
     // ----------------------------
     // Collision : joueur / tuyaux
@@ -183,13 +211,13 @@ int main()
       for (int i = 0; i < (int)px.size(); i++)
       {
         int pl = (int)std::floor(px[i]);
-        int pr = pl + 6 - 1;
+        int pr = pl + PipeWidth - 1;
 
         if (br >= pl && bl <= pr)
         {
           for (int y = bt; y <= bb; y++)
           {
-            if (y < pg[i] || y >= pg[i] + 6)
+            if (y < pg[i] || y >= pg[i] + PipeGapHeight)
             {
               dead = 1;
               break;
@@ -203,21 +231,21 @@ int main()
 
     if (dead != 0) break;
 
-    std::vector<std::string> frame(20, std::string(50, ' '));
+    std::vector<std::string> frame(ScreenHeight, std::string(ScreenWidth, ' '));
 
     // ----------------------------
-    // Dessin : tyaux ("P")
+    // Dessin : tuyaux ("P")
     // ----------------------------
     for (int i = 0; i < (int)px.size(); i++)
     {
       int pl = (int)std::floor(px[i]);
-      for (int dx = 0; dx < 6; dx++)
+      for (int dx = 0; dx < PipeWidth; dx++)
       {
         int x = pl + dx;
-        if (x < 0 || x >= 50) continue;
-        for (int y = 0; y < 20; y++)
+        if (x < 0 || x >= ScreenWidth) continue;
+        for (int y = 0; y < ScreenHeight; y++)
         {
-          if (!(y >= pg[i] && y < pg[i] + 6))
+          if (!(y >= pg[i] && y < pg[i] + PipeGapHeight))
           {
             frame[y][x] = 'P';
           }
@@ -228,14 +256,14 @@ int main()
     // ----------------------------
     // Dessin : joueur ("B")
     // ----------------------------
-    for (int dy = 0; dy < 2; dy++)
+    for (int dy = 0; dy < BirdHeight; dy++)
     {
       int y = bt + dy;
-      if (y < 0 || y >= 20) continue;
-      for (int dx = 0; dx < 2; dx++)
+      if (y < 0 || y >= ScreenHeight) continue;
+      for (int dx = 0; dx < BirdWidth; dx++)
       {
-        int x = 10 + dx;
-        if (x >= 0 && x < 50) frame[y][x] = 'B';
+        int x = BirdLeft + dx;
+        if (x >= 0 && x < ScreenWidth) frame[y][x] = 'B';
       }
     }
 
@@ -243,19 +271,19 @@ int main()
     // Prépa HUD
     // ----------------------------
     std::string scoreText = "Score: " + std::to_string(sc) + "   Best: " + std::to_string(bsc);
-    if (scoreText.size() > 50) scoreText = scoreText.substr(0, 50);
-    lp = (int)((50 - (int)scoreText.size()) / 2);
-    rp = 50 - lp - (int)scoreText.size();
+    if (scoreText.size() > ScreenWidth) scoreText = scoreText.substr(0, ScreenWidth);
+    lp = (int)((ScreenWidth - (int)scoreText.size()) / 2);
+    rp = ScreenWidth - lp - (int)scoreText.size();
 
     // ----------------------------
     // Affichage console ? Je crois
     // ----------------------------
     std::cout << "\x1b[2J\x1b[H";
-    std::cout << "+" << std::string(50, '-') << "+" << "\n";
-    for (int y = 0; y < 20; y++)
+    std::cout << "+" << std::string(ScreenWidth, '-') << "+" << "\n";
+    for (int y = 0; y < ScreenHeight; y++)
     {
       std::cout << "|";
-      for (int x = 0; x < 50; x++)
+      for (int x = 0; x < ScreenWidth; x++)
       {
         char c = frame[y][x];
         if (c == 'P')
@@ -273,19 +301,19 @@ int main()
       }
       std::cout << "|\n";
     }
-    std::cout << "+" << std::string(50, '-') << "+" << "\n";
-    std::cout << "+" << std::string(50, '-') << "+" << "\n";
+    std::cout << "+" << std::string(ScreenWidth, '-') << "+" << "\n";
+    std::cout << "+" << std::string(ScreenWidth, '-') << "+" << "\n";
     std::cout << "|" << std::string(lp, ' ') << scoreText << std::string(rp, ' ') << "|\n";
-    std::cout << "+" << std::string(50, '-') << "+" << "\n";
+    std::cout << "+" << std::string(ScreenWidth, '-') << "+" << "\n";
     std::cout.flush();
 
     // ----------------------------
     // Limitation à 30 FPS
     // ----------------------------
     float ft = std::chrono::duration<float>(std::chrono::steady_clock::now() - now).count();
-    if (ft < 1.0f / 30.0f)
+    if (ft < TargetFrameDuration)
     {
-      std::this_thread::sleep_for(std::chrono::duration<float>(1.0f / 30.0f - ft));
+      std::this_thread::sleep_for(std::chrono::duration<float>(TargetFrameDuration - ft));
     }
   }
 
