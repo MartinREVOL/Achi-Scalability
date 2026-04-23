@@ -18,6 +18,28 @@ struct Pipe
   int scored;     // 0 = pas encore compté, 1 = déjà compté
 };
 
+struct GameState
+{
+  float birdY = 9.0f;
+  float birdVelocity = 0.0f;
+
+  int birdTop = 0;
+  int birdBottom = 0;
+  int birdLeft = 0;
+  int birdRight = 0;
+
+  int dead = 0;
+  float spawnTimer = 0.0f;
+
+  unsigned long long score = 0;
+  unsigned long long bestScore = 0;
+
+  int hudLeftPadding = 0;
+  int hudRightPadding = 0;
+
+  std::vector<Pipe> pipes;
+};
+
 unsigned long long LoadBestScore(const std::string& filename)
 {
   unsigned long long bestScore = 0;
@@ -95,7 +117,7 @@ void RestoreConsole(HANDLE inputHandle, DWORD originalInputMode)
   SetConsoleMode(inputHandle, originalInputMode);
 }
 
-bool HandleInput(HANDLE inputHandle, float& birdVelocity, float jumpVelocity)
+bool HandleInput(HANDLE inputHandle, GameState& game, float jumpVelocity)
 {
   INPUT_RECORD rec;
   DWORD ne = 0;
@@ -121,7 +143,7 @@ bool HandleInput(HANDLE inputHandle, float& birdVelocity, float jumpVelocity)
       {
         if (k.wVirtualKeyCode == VK_RETURN)
         {
-          birdVelocity = jumpVelocity;
+          game.birdVelocity = jumpVelocity;
         }
       }
     }
@@ -130,26 +152,25 @@ bool HandleInput(HANDLE inputHandle, float& birdVelocity, float jumpVelocity)
   return true;
 }
 
-void UpdateBirdPhysics(float dt, float gravity, float& birdVelocity, float& birdY)
+void UpdateBirdPhysics(float dt, float gravity, GameState& game)
 {
-  birdVelocity = birdVelocity + gravity * dt;
-  birdY = birdY + birdVelocity * dt;
+  game.birdVelocity = game.birdVelocity + gravity * dt;
+  game.birdY = game.birdY + game.birdVelocity * dt;
 }
 
 void SpawnPipeIfNeeded(
   float dt,
   float pipeSpawnInterval,
   float pipeSpawnX,
-  float& spawnTimer,
-  std::vector<Pipe>& pipes,
+  GameState& game,
   std::mt19937& rng,
   std::uniform_int_distribution<int>& gapDistribution)
 {
-  spawnTimer = spawnTimer + dt;
-  if (spawnTimer >= pipeSpawnInterval)
+  game.spawnTimer = game.spawnTimer + dt;
+  if (game.spawnTimer >= pipeSpawnInterval)
   {
-    spawnTimer = spawnTimer - pipeSpawnInterval;
-    pipes.push_back({ pipeSpawnX, gapDistribution(rng), 0 });
+    game.spawnTimer = game.spawnTimer - pipeSpawnInterval;
+    game.pipes.push_back({ pipeSpawnX, gapDistribution(rng), 0 });
   }
 }
 
@@ -158,44 +179,42 @@ void UpdatePipesAndScore(
   float pipeSpeed,
   int pipeWidth,
   int birdLeft,
-  std::vector<Pipe>& pipes,
-  unsigned long long& score,
-  unsigned long long& bestScore)
+  GameState& game)
 {
-  for (int i = 0; i < (int)pipes.size(); i++)
+  for (int i = 0; i < (int)game.pipes.size(); i++)
   {
-    pipes[i].x = pipes[i].x - pipeSpeed * dt;
+    game.pipes[i].x = game.pipes[i].x - pipeSpeed * dt;
 
-    int pipeRight = (int)std::floor(pipes[i].x) + pipeWidth - 1;
-    if (pipes[i].scored == 0 && pipeRight < birdLeft)
+    int pipeRight = (int)std::floor(game.pipes[i].x) + pipeWidth - 1;
+    if (game.pipes[i].scored == 0 && pipeRight < birdLeft)
     {
-      pipes[i].scored = 1;
-      score = score + 1;
-      if (score > bestScore)
+      game.pipes[i].scored = 1;
+      game.score = game.score + 1;
+      if (game.score > game.bestScore)
       {
-        bestScore = score;
+        game.bestScore = game.score;
       }
     }
   }
 }
 
-void RemoveOffscreenPipes(float offscreenPipeLimit, int pipeWidth, std::vector<Pipe>& pipes)
+void RemoveOffscreenPipes(float offscreenPipeLimit, int pipeWidth, GameState& game)
 {
-  for (int i = (int)pipes.size() - 1; i >= 0; i--)
+  for (int i = (int)game.pipes.size() - 1; i >= 0; i--)
   {
-    if (pipes[i].x + pipeWidth < offscreenPipeLimit)
+    if (game.pipes[i].x + pipeWidth < offscreenPipeLimit)
     {
-      pipes.erase(pipes.begin() + i);
+      game.pipes.erase(game.pipes.begin() + i);
     }
   }
 }
 
-void GetBirdBounds(float birdY, int birdHeight, int birdLeft, int birdWidth, int& birdTop, int& birdBottom, int& birdLeftOut, int& birdRight)
+void GetBirdBounds(float birdY, int birdHeight, int birdLeft, int birdWidth, GameState& game)
 {
-  birdTop = (int)std::floor(birdY);
-  birdBottom = birdTop + birdHeight - 1;
-  birdLeftOut = birdLeft;
-  birdRight = birdLeft + birdWidth - 1;
+  game.birdTop = (int)std::floor(birdY);
+  game.birdBottom = game.birdTop + birdHeight - 1;
+  game.birdLeft = birdLeft;
+  game.birdRight = birdLeft + birdWidth - 1;
 }
 
 bool CheckWallCollision(int birdTop, int birdBottom, int screenHeight)
@@ -369,86 +388,56 @@ int main()
     return 1;
   }
 
-  // ----------------------------
-  // Données du joueur ("bird")
-  // ----------------------------
-  float by = 9.0f;                      // y position (float)
-  float bv = 0.0f;                      // velocity
-  int   bt = 0;                         // top (int)
-  int   bb = 0;                         // bottom (int)
-  int   bl = BirdLeft;                  // left
-  int   br = BirdLeft + BirdWidth - 1;  // right
-  int dead = 0;                         // 0 = alive, 1 = dead
-  float t  = 0.0f;                      // spawn timer
-  unsigned long long sc  = 0;           // current score
-  unsigned long long bsc = 0;           // best score
+  GameState game;
 
-  // hud padding
-  int lp = 0; // left padding
-  int rp = 0; // right padding
-  
-  // ----------------------------
-  // Données des tuyaux
-  // ----------------------------
-  std::vector<Pipe> pipes;
-
-  // ----------------------------
-  // Générateur aléatoire
-  // ----------------------------
   std::mt19937 rng(std::random_device{}());
-  std::uniform_int_distribution<int> d(GapMinTop, GapMaxTop); // gap position
+  std::uniform_int_distribution<int> d(GapMinTop, GapMaxTop);
 
-  // ----------------------------
-  // Chargement du meilleur score
-  // ----------------------------
-  bsc = LoadBestScore("best-score.txt");
+  game.bestScore = LoadBestScore("best-score.txt");
 
   auto prev = std::chrono::steady_clock::now();
 
-  // ----------------------------
-  // Boucle principale du jeu
-  // ----------------------------
-  while (dead == 0)
+  while (game.dead == 0)
   {
     auto now = std::chrono::steady_clock::now();
     float dt = std::chrono::duration<float>(now - prev).count();
     prev = now;
     if (dt > MaxDeltaTime) dt = MaxDeltaTime;
 
-    if (!HandleInput(h, bv, JumpVelocity))
+    if (!HandleInput(h, game, JumpVelocity))
     {
       RestoreConsole(h, m);
       return 1;
     }
 
-    UpdateBirdPhysics(dt, Gravity, bv, by);
+    UpdateBirdPhysics(dt, Gravity, game);
 
-    SpawnPipeIfNeeded(dt, PipeSpawnInterval, PipeSpawnX, t, pipes, rng, d);
-    UpdatePipesAndScore(dt, PipeSpeed, PipeWidth, BirdLeft, pipes, sc, bsc);
-    RemoveOffscreenPipes(OffscreenPipeLimit, PipeWidth, pipes);
+    SpawnPipeIfNeeded(dt, PipeSpawnInterval, PipeSpawnX, game, rng, d);
+    UpdatePipesAndScore(dt, PipeSpeed, PipeWidth, BirdLeft, game);
+    RemoveOffscreenPipes(OffscreenPipeLimit, PipeWidth, game);
 
-    GetBirdBounds(by, BirdHeight, BirdLeft, BirdWidth, bt, bb, bl, br);
+    GetBirdBounds(game.birdY, BirdHeight, BirdLeft, BirdWidth, game);
 
-    if (CheckWallCollision(bt, bb, ScreenHeight))
+    if (CheckWallCollision(game.birdTop, game.birdBottom, ScreenHeight))
     {
-      dead = 1;
+      game.dead = 1;
     }
 
-    if (!dead && CheckPipeCollision(bt, bb, bl, br, PipeWidth, PipeGapHeight, pipes))
+    if (!game.dead && CheckPipeCollision(game.birdTop, game.birdBottom, game.birdLeft, game.birdRight, PipeWidth, PipeGapHeight, game.pipes))
     {
-      dead = 1;
+      game.dead = 1;
     }
 
-    if (dead != 0) break;
+    if (game.dead != 0) break;
 
     std::vector<std::string> frame = BuildEmptyFrame(ScreenWidth, ScreenHeight);
-    DrawPipes(frame, pipes, PipeWidth, PipeGapHeight, ScreenWidth, ScreenHeight);
-    DrawBird(frame, bt, BirdLeft, BirdWidth, BirdHeight, ScreenWidth, ScreenHeight);
+    DrawPipes(frame, game.pipes, PipeWidth, PipeGapHeight, ScreenWidth, ScreenHeight);
+    DrawBird(frame, game.birdTop, BirdLeft, BirdWidth, BirdHeight, ScreenWidth, ScreenHeight);
 
-    std::string scoreText = BuildScoreText(sc, bsc, ScreenWidth);
-    ComputeHudPadding(scoreText, ScreenWidth, lp, rp);
+    std::string scoreText = BuildScoreText(game.score, game.bestScore, ScreenWidth);
+    ComputeHudPadding(scoreText, ScreenWidth, game.hudLeftPadding, game.hudRightPadding);
 
-    RenderFrame(frame, ScreenWidth, ScreenHeight, scoreText, lp, rp);
+    RenderFrame(frame, ScreenWidth, ScreenHeight, scoreText, game.hudLeftPadding, game.hudRightPadding);
 
     float ft = std::chrono::duration<float>(std::chrono::steady_clock::now() - now).count();
     if (ft < TargetFrameDuration)
@@ -457,7 +446,7 @@ int main()
     }
   }
 
-  SaveBestScore("best-score.txt", bsc);
+  SaveBestScore("best-score.txt", game.bestScore);
   RestoreConsole(h, m);
   return 0;
 }
