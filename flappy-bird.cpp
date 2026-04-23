@@ -29,7 +29,9 @@ int main()
   if (!SetConsoleMode(h, m2))   { std::cerr << "error" << std::endl; return 1; }
   if (GetConsoleMode(h2, &m3))  SetConsoleMode(h2, m3 | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
 
-  // bird
+  // ----------------------------
+  // Données du joueur ("bird")
+  // ----------------------------
   float by = 9.0f;         // y position (float)
   float bv = 0.0f;         // velocity
   int   bt = 0;            // top (int)
@@ -43,12 +45,17 @@ int main()
   // hud padding
   int lp = 0; // left padding
   int rp = 0; // right padding
-  // pipe data
+  
+  // ----------------------------
+  // Données des tuyaux
+  // ----------------------------
   std::vector<float> px; // x positions
   std::vector<int>   pg; // gap tops
   std::vector<int>   ps; // scored flag (0 or 1)
 
-  // rng
+  // ----------------------------
+  // Générateur aléatoire
+  // ----------------------------
   std::mt19937 rng(std::random_device{}());
   std::uniform_int_distribution<int> d(2, 20 - 6 - 2); // gap position
 
@@ -58,7 +65,9 @@ int main()
   // int debug = 1;
   // if (debug) std::cout << "debug: game starting" << std::endl;
 
-  // load best score
+  // ----------------------------
+  // Chargement du meilleur score
+  // ----------------------------
   std::ifstream fin("best-score.txt");
   if (fin)
   {
@@ -69,7 +78,9 @@ int main()
 
   auto prev = std::chrono::steady_clock::now();
 
-  // main loop
+  // ----------------------------
+  // Boucle principale du jeu
+  // ----------------------------
   while (dead == 0)
   {
     // delta time
@@ -78,7 +89,9 @@ int main()
     prev = now;
     if (dt > 0.1f) dt = 0.1f; // clamp delta time
 
-    // read input events
+    // ----------------------------
+    // Lecture des événements clavier
+    // ----------------------------
     DWORD nEvents = 0;
     if (!GetNumberOfConsoleInputEvents(h, &nEvents)) {
       SetConsoleMode(h, m);
@@ -107,9 +120,15 @@ int main()
       } // end if key event
     } // end for each event
 
+    // ----------------------------
+    // Physique du joueur
+    // ----------------------------
     bv = bv + 42.0f * dt;
     by = by + bv * dt;
 
+    // ----------------------------
+    // Spawn des tuyaux
+    // ----------------------------
     t = t + dt;
     if (t >= 1.4f)
     {
@@ -119,6 +138,9 @@ int main()
       ps.push_back(0); 
     } 
 
+    // ----------------------------
+    // Déplacement des tuyaux + score
+    // ----------------------------
     for (int i = 0; i < (int)px.size(); i++) // loop over all pipes
     {
       px[i] = px[i] - 18.0f * dt; // move pipe left
@@ -128,8 +150,12 @@ int main()
         ps[i] = 1;         
         sc = sc + 1;        
         if (sc > bsc) bsc = sc;
-      }}
+      }
+    }
 
+    // ----------------------------
+    // Suppression des tuyaux hors écran
+    // ----------------------------
     for (int i = (int)px.size() - 1; i >= 0; i--) {
       if (px[i] + 6.0f < 0.0f) 
       {
@@ -139,7 +165,9 @@ int main()
       }
     }
 
-    // collision
+    // ----------------------------
+    // Collision : joueur / murs
+    // ----------------------------
     bt = (int)std::floor(by); 
     bb = bt + 2 - 1;          
     bl = 10;                   // same every frame
@@ -147,6 +175,9 @@ int main()
     // check wall 
     if (bt < 0 || bb >= 20)  { dead = 1;  }
 
+    // ----------------------------
+    // Collision : joueur / tuyaux
+    // ----------------------------
     if (!dead)
     {
       for (int i = 0; i < (int)px.size(); i++)
@@ -174,6 +205,9 @@ int main()
 
     std::vector<std::string> frame(20, std::string(50, ' '));
 
+    // ----------------------------
+    // Dessin : tyaux ("P")
+    // ----------------------------
     for (int i = 0; i < (int)px.size(); i++)
     {
       int pl = (int)std::floor(px[i]);
@@ -191,6 +225,9 @@ int main()
       }
     }
 
+    // ----------------------------
+    // Dessin : joueur ("B")
+    // ----------------------------
     for (int dy = 0; dy < 2; dy++)
     {
       int y = bt + dy;
@@ -202,11 +239,17 @@ int main()
       }
     }
 
+    // ----------------------------
+    // Prépa HUD
+    // ----------------------------
     std::string scoreText = "Score: " + std::to_string(sc) + "   Best: " + std::to_string(bsc);
     if (scoreText.size() > 50) scoreText = scoreText.substr(0, 50);
     lp = (int)((50 - (int)scoreText.size()) / 2);
     rp = 50 - lp - (int)scoreText.size();
 
+    // ----------------------------
+    // Affichage console ? Je crois
+    // ----------------------------
     std::cout << "\x1b[2J\x1b[H";
     std::cout << "+" << std::string(50, '-') << "+" << "\n";
     for (int y = 0; y < 20; y++)
@@ -236,6 +279,9 @@ int main()
     std::cout << "+" << std::string(50, '-') << "+" << "\n";
     std::cout.flush();
 
+    // ----------------------------
+    // Limitation à 30 FPS
+    // ----------------------------
     float ft = std::chrono::duration<float>(std::chrono::steady_clock::now() - now).count();
     if (ft < 1.0f / 30.0f)
     {
@@ -243,7 +289,9 @@ int main()
     }
   }
 
-  // save best score to file
+  // ----------------------------
+  // Sauvegarde du meilleur score
+  // ----------------------------
   std::ofstream fout("best-score.txt", std::ios::trunc);
   if (fout) fout << bsc; // write best score
   fout.close(); // close the file
