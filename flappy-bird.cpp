@@ -39,6 +39,16 @@ int main()
   const int GapMinTop = 2;
   const int GapMaxTop = ScreenHeight - PipeGapHeight - 2;
 
+  // ----------------------------
+  // Structure de données : tuyau
+  // ----------------------------
+  struct Pipe
+  {
+    float x;        // position horizontale
+    int gapTop;     // début vertical du trou
+    int scored;     // 0 = pas encore compté, 1 = déjà compté
+  };
+
   HANDLE h  = GetStdHandle(STD_INPUT_HANDLE);  // input
   HANDLE h2 = GetStdHandle(STD_OUTPUT_HANDLE); // output
   if (h == INVALID_HANDLE_VALUE)  { std::cerr << "error"  << std::endl; return 1; }
@@ -76,9 +86,7 @@ int main()
   // ----------------------------
   // Données des tuyaux
   // ----------------------------
-  std::vector<float> px; // x positions
-  std::vector<int>   pg; // gap tops
-  std::vector<int>   ps; // scored flag (0 or 1)
+  std::vector<Pipe> pipes;
 
   // ----------------------------
   // Générateur aléatoire
@@ -160,21 +168,19 @@ int main()
     if (t >= PipeSpawnInterval)
     {
       t = t - PipeSpawnInterval;
-      px.push_back(PipeSpawnX); 
-      pg.push_back(d(rng)); 
-      ps.push_back(0); 
+      pipes.push_back({ PipeSpawnX, d(rng), 0 });
     } 
 
     // ----------------------------
     // Déplacement des tuyaux + score
     // ----------------------------
-    for (int i = 0; i < (int)px.size(); i++) // loop over all pipes
+    for (int i = 0; i < (int)pipes.size(); i++) // loop over all pipes
     {
-      px[i] = px[i] - PipeSpeed * dt; // move pipe left
+      pipes[i].x = pipes[i].x - PipeSpeed * dt; // move pipe left
 
-      int pipeRight = (int)std::floor(px[i]) + PipeWidth - 1;
-      if (ps[i] == 0 && pipeRight < BirdLeft) {
-        ps[i] = 1;         
+      int pipeRight = (int)std::floor(pipes[i].x) + PipeWidth - 1;
+      if (pipes[i].scored == 0 && pipeRight < BirdLeft) {
+        pipes[i].scored = 1;         
         sc = sc + 1;        
         if (sc > bsc) bsc = sc;
       }
@@ -183,12 +189,10 @@ int main()
     // ----------------------------
     // Suppression des tuyaux hors écran
     // ----------------------------
-    for (int i = (int)px.size() - 1; i >= 0; i--) {
-      if (px[i] + PipeWidth < OffscreenPipeLimit) 
+    for (int i = (int)pipes.size() - 1; i >= 0; i--) {
+      if (pipes[i].x + PipeWidth < OffscreenPipeLimit) 
       {
-        px.erase(px.begin() + i); 
-        pg.erase(pg.begin() + i); 
-        ps.erase(ps.begin() + i); 
+        pipes.erase(pipes.begin() + i);
       }
     }
 
@@ -208,16 +212,16 @@ int main()
     // ----------------------------
     if (!dead)
     {
-      for (int i = 0; i < (int)px.size(); i++)
+      for (int i = 0; i < (int)pipes.size(); i++)
       {
-        int pl = (int)std::floor(px[i]);
+        int pl = (int)std::floor(pipes[i].x);
         int pr = pl + PipeWidth - 1;
 
         if (br >= pl && bl <= pr)
         {
           for (int y = bt; y <= bb; y++)
           {
-            if (y < pg[i] || y >= pg[i] + PipeGapHeight)
+            if (y < pipes[i].gapTop || y >= pipes[i].gapTop + PipeGapHeight)
             {
               dead = 1;
               break;
@@ -236,16 +240,16 @@ int main()
     // ----------------------------
     // Dessin : tuyaux ("P")
     // ----------------------------
-    for (int i = 0; i < (int)px.size(); i++)
+    for (int i = 0; i < (int)pipes.size(); i++)
     {
-      int pl = (int)std::floor(px[i]);
+      int pl = (int)std::floor(pipes[i].x);
       for (int dx = 0; dx < PipeWidth; dx++)
       {
         int x = pl + dx;
         if (x < 0 || x >= ScreenWidth) continue;
         for (int y = 0; y < ScreenHeight; y++)
         {
-          if (!(y >= pg[i] && y < pg[i] + PipeGapHeight))
+          if (!(y >= pipes[i].gapTop && y < pipes[i].gapTop + PipeGapHeight))
           {
             frame[y][x] = 'P';
           }
