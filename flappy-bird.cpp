@@ -39,6 +39,55 @@ void SaveBestScore(const std::string& filename, unsigned long long bestScore)
   fout.close();
 }
 
+bool SetupConsole(HANDLE& inputHandle, HANDLE& outputHandle, DWORD& originalInputMode)
+{
+  inputHandle = GetStdHandle(STD_INPUT_HANDLE);
+  outputHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+
+  if (inputHandle == INVALID_HANDLE_VALUE)
+  {
+    std::cerr << "error" << std::endl;
+    return false;
+  }
+
+  if (outputHandle == INVALID_HANDLE_VALUE)
+  {
+    std::cerr << "error" << std::endl;
+    return false;
+  }
+
+  DWORD modifiedInputMode = 0;
+  DWORD outputMode = 0;
+
+  if (!GetConsoleMode(inputHandle, &originalInputMode))
+  {
+    std::cerr << "error" << std::endl;
+    return false;
+  }
+
+  modifiedInputMode = originalInputMode;
+  modifiedInputMode &= ~ENABLE_LINE_INPUT;
+  modifiedInputMode &= ~ENABLE_ECHO_INPUT;
+
+  if (!SetConsoleMode(inputHandle, modifiedInputMode))
+  {
+    std::cerr << "error" << std::endl;
+    return false;
+  }
+
+  if (GetConsoleMode(outputHandle, &outputMode))
+  {
+    SetConsoleMode(outputHandle, outputMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+  }
+
+  return true;
+}
+
+void RestoreConsole(HANDLE inputHandle, DWORD originalInputMode)
+{
+  SetConsoleMode(inputHandle, originalInputMode);
+}
+
 int main()
 {
   // ----------------------------
@@ -77,21 +126,14 @@ int main()
     int scored;     // 0 = pas encore compté, 1 = déjà compté
   };
 
-  HANDLE h  = GetStdHandle(STD_INPUT_HANDLE);  // input
-  HANDLE h2 = GetStdHandle(STD_OUTPUT_HANDLE); // output
-  if (h == INVALID_HANDLE_VALUE)  { std::cerr << "error"  << std::endl; return 1; }
-  if (h2 == INVALID_HANDLE_VALUE) { std::cerr << "error" << std::endl; return 1; }
+  HANDLE h = INVALID_HANDLE_VALUE;
+  HANDLE h2 = INVALID_HANDLE_VALUE;
+  DWORD m = 0;
 
-  // use words for console io
-  DWORD m  = 0;
-  DWORD m2 = 0;
-  DWORD m3 = 0;
-  if (!GetConsoleMode(h,  &m))  { std::cerr << "error" << std::endl; return 1; }
-  m2 = m;
-  m2 &= ~ENABLE_LINE_INPUT;
-  m2 &= ~ENABLE_ECHO_INPUT;
-  if (!SetConsoleMode(h, m2))   { std::cerr << "error" << std::endl; return 1; }
-  if (GetConsoleMode(h2, &m3))  SetConsoleMode(h2, m3 | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+  if (!SetupConsole(h, h2, m))
+  {
+    return 1;
+  }
 
   // ----------------------------
   // Données du joueur ("bird")
@@ -107,7 +149,7 @@ int main()
   unsigned long long sc  = 0;           // current score
   unsigned long long bsc = 0;           // best score
 
-  // hud padding 
+  // hud padding
   int lp = 0; // left padding
   int rp = 0; // right padding
   
@@ -150,8 +192,9 @@ int main()
     // Lecture des événements clavier
     // ----------------------------
     DWORD nEvents = 0;
-    if (!GetNumberOfConsoleInputEvents(h, &nEvents)) {
-      SetConsoleMode(h, m);
+    if (!GetNumberOfConsoleInputEvents(h, &nEvents))
+    {
+      RestoreConsole(h, m);
       return 1;
     }
 
@@ -160,7 +203,7 @@ int main()
       if (!ReadConsoleInput(h, &rec, 1, &ne))
       {
         std::cerr << "Failed to read console input." << std::endl;
-        SetConsoleMode(h, m);
+        RestoreConsole(h, m);
         return 1;
       } // end if ReadConsoleInput
 
@@ -191,7 +234,7 @@ int main()
     {
       t = t - PipeSpawnInterval;
       pipes.push_back({ PipeSpawnX, d(rng), 0 });
-    } 
+    }
 
     // ----------------------------
     // Déplacement des tuyaux + score
@@ -201,9 +244,10 @@ int main()
       pipes[i].x = pipes[i].x - PipeSpeed * dt; // move pipe left
 
       int pipeRight = (int)std::floor(pipes[i].x) + PipeWidth - 1;
-      if (pipes[i].scored == 0 && pipeRight < BirdLeft) {
-        pipes[i].scored = 1;         
-        sc = sc + 1;        
+      if (pipes[i].scored == 0 && pipeRight < BirdLeft)
+      {
+        pipes[i].scored = 1;
+        sc = sc + 1;
         if (sc > bsc) bsc = sc;
       }
     }
@@ -211,8 +255,9 @@ int main()
     // ----------------------------
     // Suppression des tuyaux hors écran
     // ----------------------------
-    for (int i = (int)pipes.size() - 1; i >= 0; i--) {
-      if (pipes[i].x + PipeWidth < OffscreenPipeLimit) 
+    for (int i = (int)pipes.size() - 1; i >= 0; i--)
+    {
+      if (pipes[i].x + PipeWidth < OffscreenPipeLimit)
       {
         pipes.erase(pipes.begin() + i);
       }
@@ -221,13 +266,13 @@ int main()
     // ----------------------------
     // Collision : joueur / murs
     // ----------------------------
-    bt = (int)std::floor(by); 
-    bb = bt + BirdHeight - 1;          
-    bl = BirdLeft;                     
-    br = BirdLeft + BirdWidth - 1;     
+    bt = (int)std::floor(by);
+    bb = bt + BirdHeight - 1;
+    bl = BirdLeft;
+    br = BirdLeft + BirdWidth - 1;
 
-    // check wall 
-    if (bt < 0 || bb >= ScreenHeight)  { dead = 1;  }
+    // check wall
+    if (bt < 0 || bb >= ScreenHeight)  { dead = 1; }
 
     // ----------------------------
     // Collision : joueur / tuyaux
@@ -349,6 +394,6 @@ int main()
   SaveBestScore("best-score.txt", bsc);
 
   // restore original console mode
-  SetConsoleMode(h, m);
+  RestoreConsole(h, m);
   return 0;
 }
