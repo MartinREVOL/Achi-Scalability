@@ -190,6 +190,48 @@ void RemoveOffscreenPipes(float offscreenPipeLimit, int pipeWidth, std::vector<P
   }
 }
 
+void GetBirdBounds(float birdY, int birdHeight, int birdLeft, int birdWidth, int& birdTop, int& birdBottom, int& birdLeftOut, int& birdRight)
+{
+  birdTop = (int)std::floor(birdY);
+  birdBottom = birdTop + birdHeight - 1;
+  birdLeftOut = birdLeft;
+  birdRight = birdLeft + birdWidth - 1;
+}
+
+bool CheckWallCollision(int birdTop, int birdBottom, int screenHeight)
+{
+  return birdTop < 0 || birdBottom >= screenHeight;
+}
+
+bool CheckPipeCollision(
+  int birdTop,
+  int birdBottom,
+  int birdLeft,
+  int birdRight,
+  int pipeWidth,
+  int pipeGapHeight,
+  const std::vector<Pipe>& pipes)
+{
+  for (int i = 0; i < (int)pipes.size(); i++)
+  {
+    int pipeLeft = (int)std::floor(pipes[i].x);
+    int pipeRight = pipeLeft + pipeWidth - 1;
+
+    if (birdRight >= pipeLeft && birdLeft <= pipeRight)
+    {
+      for (int y = birdTop; y <= birdBottom; y++)
+      {
+        if (y < pipes[i].gapTop || y >= pipes[i].gapTop + pipeGapHeight)
+        {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
 int main()
 {
   // ----------------------------
@@ -296,40 +338,18 @@ int main()
     RemoveOffscreenPipes(OffscreenPipeLimit, PipeWidth, pipes);
 
     // ----------------------------
-    // Collision : joueur / murs
+    // Collision
     // ----------------------------
-    bt = (int)std::floor(by);
-    bb = bt + BirdHeight - 1;
-    bl = BirdLeft;
-    br = BirdLeft + BirdWidth - 1;
+    GetBirdBounds(by, BirdHeight, BirdLeft, BirdWidth, bt, bb, bl, br);
 
-    // check wall
-    if (bt < 0 || bb >= ScreenHeight)  { dead = 1; }
-
-    // ----------------------------
-    // Collision : joueur / tuyaux
-    // ----------------------------
-    if (!dead)
+    if (CheckWallCollision(bt, bb, ScreenHeight))
     {
-      for (int i = 0; i < (int)pipes.size(); i++)
-      {
-        int pl = (int)std::floor(pipes[i].x);
-        int pr = pl + PipeWidth - 1;
+      dead = 1;
+    }
 
-        if (br >= pl && bl <= pr)
-        {
-          for (int y = bt; y <= bb; y++)
-          {
-            if (y < pipes[i].gapTop || y >= pipes[i].gapTop + PipeGapHeight)
-            {
-              dead = 1;
-              break;
-            }
-          }
-        }
-
-        if (dead != 0) break;
-      }
+    if (!dead && CheckPipeCollision(bt, bb, bl, br, PipeWidth, PipeGapHeight, pipes))
+    {
+      dead = 1;
     }
 
     if (dead != 0) break;
