@@ -232,6 +232,106 @@ bool CheckPipeCollision(
   return false;
 }
 
+std::vector<std::string> BuildEmptyFrame(int screenWidth, int screenHeight)
+{
+  return std::vector<std::string>(screenHeight, std::string(screenWidth, ' '));
+}
+
+void DrawPipes(std::vector<std::string>& frame, const std::vector<Pipe>& pipes, int pipeWidth, int pipeGapHeight, int screenWidth, int screenHeight)
+{
+  for (int i = 0; i < (int)pipes.size(); i++)
+  {
+    int pipeLeft = (int)std::floor(pipes[i].x);
+    for (int dx = 0; dx < pipeWidth; dx++)
+    {
+      int x = pipeLeft + dx;
+      if (x < 0 || x >= screenWidth) continue;
+
+      for (int y = 0; y < screenHeight; y++)
+      {
+        if (!(y >= pipes[i].gapTop && y < pipes[i].gapTop + pipeGapHeight))
+        {
+          frame[y][x] = 'P';
+        }
+      }
+    }
+  }
+}
+
+void DrawBird(std::vector<std::string>& frame, int birdTop, int birdLeft, int birdWidth, int birdHeight, int screenWidth, int screenHeight)
+{
+  for (int dy = 0; dy < birdHeight; dy++)
+  {
+    int y = birdTop + dy;
+    if (y < 0 || y >= screenHeight) continue;
+
+    for (int dx = 0; dx < birdWidth; dx++)
+    {
+      int x = birdLeft + dx;
+      if (x >= 0 && x < screenWidth)
+      {
+        frame[y][x] = 'B';
+      }
+    }
+  }
+}
+
+std::string BuildScoreText(unsigned long long score, unsigned long long bestScore, int screenWidth)
+{
+  std::string scoreText = "Score: " + std::to_string(score) + "   Best: " + std::to_string(bestScore);
+  if (scoreText.size() > (size_t)screenWidth)
+  {
+    scoreText = scoreText.substr(0, screenWidth);
+  }
+  return scoreText;
+}
+
+void ComputeHudPadding(const std::string& scoreText, int screenWidth, int& leftPadding, int& rightPadding)
+{
+  leftPadding = (int)((screenWidth - (int)scoreText.size()) / 2);
+  rightPadding = screenWidth - leftPadding - (int)scoreText.size();
+}
+
+void RenderFrame(
+  const std::vector<std::string>& frame,
+  int screenWidth,
+  int screenHeight,
+  const std::string& scoreText,
+  int leftPadding,
+  int rightPadding)
+{
+  std::cout << "\x1b[2J\x1b[H";
+  std::cout << "+" << std::string(screenWidth, '-') << "+" << "\n";
+
+  for (int y = 0; y < screenHeight; y++)
+  {
+    std::cout << "|";
+    for (int x = 0; x < screenWidth; x++)
+    {
+      char c = frame[y][x];
+      if (c == 'P')
+      {
+        std::cout << "\x1b[32mP\x1b[0m";
+      }
+      else if (c == 'B')
+      {
+        std::cout << "\x1b[33mB\x1b[0m";
+      }
+      else
+      {
+        std::cout << ' ';
+      }
+    }
+    std::cout << "|\n";
+  }
+
+  std::cout << "+" << std::string(screenWidth, '-') << "+" << "\n";
+  std::cout << "+" << std::string(screenWidth, '-') << "+" << "\n";
+  std::cout << "|" << std::string(leftPadding, ' ') << scoreText << std::string(rightPadding, ' ') << "|\n";
+  std::cout << "+" << std::string(screenWidth, '-') << "+" << "\n";
+  std::cout.flush();
+}
+
 int main()
 {
   // ----------------------------
@@ -310,36 +410,23 @@ int main()
   // ----------------------------
   while (dead == 0)
   {
-    // delta time
     auto now = std::chrono::steady_clock::now();
     float dt = std::chrono::duration<float>(now - prev).count();
     prev = now;
-    if (dt > MaxDeltaTime) dt = MaxDeltaTime; // clamp delta time
+    if (dt > MaxDeltaTime) dt = MaxDeltaTime;
 
-    // ----------------------------
-    // Input
-    // ----------------------------
     if (!HandleInput(h, bv, JumpVelocity))
     {
       RestoreConsole(h, m);
       return 1;
     }
 
-    // ----------------------------
-    // Physique du joueur
-    // ----------------------------
     UpdateBirdPhysics(dt, Gravity, bv, by);
 
-    // ----------------------------
-    // Spawn / update des tuyaux
-    // ----------------------------
     SpawnPipeIfNeeded(dt, PipeSpawnInterval, PipeSpawnX, t, pipes, rng, d);
     UpdatePipesAndScore(dt, PipeSpeed, PipeWidth, BirdLeft, pipes, sc, bsc);
     RemoveOffscreenPipes(OffscreenPipeLimit, PipeWidth, pipes);
 
-    // ----------------------------
-    // Collision
-    // ----------------------------
     GetBirdBounds(by, BirdHeight, BirdLeft, BirdWidth, bt, bb, bl, br);
 
     if (CheckWallCollision(bt, bb, ScreenHeight))
@@ -354,85 +441,15 @@ int main()
 
     if (dead != 0) break;
 
-    std::vector<std::string> frame(ScreenHeight, std::string(ScreenWidth, ' '));
+    std::vector<std::string> frame = BuildEmptyFrame(ScreenWidth, ScreenHeight);
+    DrawPipes(frame, pipes, PipeWidth, PipeGapHeight, ScreenWidth, ScreenHeight);
+    DrawBird(frame, bt, BirdLeft, BirdWidth, BirdHeight, ScreenWidth, ScreenHeight);
 
-    // ----------------------------
-    // Dessin : tuyaux ("P")
-    // ----------------------------
-    for (int i = 0; i < (int)pipes.size(); i++)
-    {
-      int pl = (int)std::floor(pipes[i].x);
-      for (int dx = 0; dx < PipeWidth; dx++)
-      {
-        int x = pl + dx;
-        if (x < 0 || x >= ScreenWidth) continue;
-        for (int y = 0; y < ScreenHeight; y++)
-        {
-          if (!(y >= pipes[i].gapTop && y < pipes[i].gapTop + PipeGapHeight))
-          {
-            frame[y][x] = 'P';
-          }
-        }
-      }
-    }
+    std::string scoreText = BuildScoreText(sc, bsc, ScreenWidth);
+    ComputeHudPadding(scoreText, ScreenWidth, lp, rp);
 
-    // ----------------------------
-    // Dessin : joueur ("B")
-    // ----------------------------
-    for (int dy = 0; dy < BirdHeight; dy++)
-    {
-      int y = bt + dy;
-      if (y < 0 || y >= ScreenHeight) continue;
-      for (int dx = 0; dx < BirdWidth; dx++)
-      {
-        int x = BirdLeft + dx;
-        if (x >= 0 && x < ScreenWidth) frame[y][x] = 'B';
-      }
-    }
+    RenderFrame(frame, ScreenWidth, ScreenHeight, scoreText, lp, rp);
 
-    // ----------------------------
-    // Prépa HUD
-    // ----------------------------
-    std::string scoreText = "Score: " + std::to_string(sc) + "   Best: " + std::to_string(bsc);
-    if (scoreText.size() > ScreenWidth) scoreText = scoreText.substr(0, ScreenWidth);
-    lp = (int)((ScreenWidth - (int)scoreText.size()) / 2);
-    rp = ScreenWidth - lp - (int)scoreText.size();
-
-    // ----------------------------
-    // Affichage console ? Je crois
-    // ----------------------------
-    std::cout << "\x1b[2J\x1b[H";
-    std::cout << "+" << std::string(ScreenWidth, '-') << "+" << "\n";
-    for (int y = 0; y < ScreenHeight; y++)
-    {
-      std::cout << "|";
-      for (int x = 0; x < ScreenWidth; x++)
-      {
-        char c = frame[y][x];
-        if (c == 'P')
-        {
-          std::cout << "\x1b[32mP\x1b[0m";
-        }
-        else if (c == 'B')
-        {
-          std::cout << "\x1b[33mB\x1b[0m";
-        }
-        else
-        {
-          std::cout << ' ';
-        }
-      }
-      std::cout << "|\n";
-    }
-    std::cout << "+" << std::string(ScreenWidth, '-') << "+" << "\n";
-    std::cout << "+" << std::string(ScreenWidth, '-') << "+" << "\n";
-    std::cout << "|" << std::string(lp, ' ') << scoreText << std::string(rp, ' ') << "|\n";
-    std::cout << "+" << std::string(ScreenWidth, '-') << "+" << "\n";
-    std::cout.flush();
-
-    // ----------------------------
-    // Limitation à 30 FPS
-    // ----------------------------
     float ft = std::chrono::duration<float>(std::chrono::steady_clock::now() - now).count();
     if (ft < TargetFrameDuration)
     {
@@ -440,12 +457,7 @@ int main()
     }
   }
 
-  // ----------------------------
-  // Sauvegarde du meilleur score
-  // ----------------------------
   SaveBestScore("best-score.txt", bsc);
-
-  // restore original console mode
   RestoreConsole(h, m);
   return 0;
 }
