@@ -11,6 +11,34 @@
 #include <cmath>
 #include <fstream>
 
+unsigned long long LoadBestScore(const std::string& filename)
+{
+  unsigned long long bestScore = 0;
+  std::ifstream fin(filename);
+
+  if (fin)
+  {
+    fin >> bestScore;
+    if (!fin)
+    {
+      bestScore = 0;
+    }
+  }
+
+  fin.close();
+  return bestScore;
+}
+
+void SaveBestScore(const std::string& filename, unsigned long long bestScore)
+{
+  std::ofstream fout(filename, std::ios::trunc);
+  if (fout)
+  {
+    fout << bestScore;
+  }
+  fout.close();
+}
+
 int main()
 {
   // ----------------------------
@@ -103,13 +131,7 @@ int main()
   // ----------------------------
   // Chargement du meilleur score
   // ----------------------------
-  std::ifstream fin("best-score.txt");
-  if (fin)
-  {
-    fin >> bsc;
-    if (!fin) bsc = 0; // reset if read failed
-  }
-  fin.close(); // close the file
+  bsc = LoadBestScore("best-score.txt");
 
   auto prev = std::chrono::steady_clock::now();
 
@@ -324,9 +346,7 @@ int main()
   // ----------------------------
   // Sauvegarde du meilleur score
   // ----------------------------
-  std::ofstream fout("best-score.txt", std::ios::trunc);
-  if (fout) fout << bsc; // write best score
-  fout.close(); // close the file
+  SaveBestScore("best-score.txt", bsc);
 
   // restore original console mode
   SetConsoleMode(h, m);
