@@ -13,7 +13,7 @@
 - Laisser plus de temps pour la pré-production, valider fun + faisabilité (utiliser des vertical slices)
 - Autoriser les echecs tôt dans un projet ou bien juste arrêter le projet pour le restructurer correctement
 - faire des réunions régulières entre équipes (méthode Agile), avoir un document GD clair pour tous
-- faire des play test régulièrement, puis définir des KPIs centrés sur l'experience et le game feel.
+- faire des play test régulièrement, puis définir des KPIs centrés sur l'experience et le game feel
 
 ## Ma conclusion :
 Pour moi, l’échec de Skull and Bones est purement organisationnel : manque de vision, lourdeur hiérarchique, mauvaise pré-production et incapacité à pivoter intelligemment.
